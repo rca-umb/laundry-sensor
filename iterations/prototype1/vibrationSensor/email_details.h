@@ -1,0 +1,5 @@
+#define EMAIL_ADDR ""
+#define EMAIL_PASS ""
+#define EMAIL_NAME ""
+#define EMAIL_LINK ""
+#define EMAIL_DEST ""
