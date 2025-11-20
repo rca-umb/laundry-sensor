@@ -40,15 +40,9 @@ void setup() {
   Serial.println("Connected to wifi.");
 
   server.begin();
-  // The following seven lines are just for testing
-  delay(1000);
-  bool test = sendEmail();
-  if (test) {
-    Serial.println("Test email sent successfully.");
-  } else {
-    Serial.println("Test email failed to send.");
-  }
   vibLimit = readVibration() * 1.1;
+  Serial.print("Email will be sent when vibration drops below: ");
+  Serial.println(vibLimit);
   lastReadingTime = millis();
   digitalWrite(led, 1);
 }
