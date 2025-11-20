@@ -19,7 +19,7 @@ int led = LED_BUILTIN;
 WiFiClient httpClient;
 WiFiServer server(80);
 
-const float vibLimit = 1.0;
+float vibLimit;
 float currentVibs;
 
 unsigned long lastReadingTime = 0;
@@ -39,8 +39,16 @@ void setup() {
   }
   Serial.println("Connected to wifi.");
 
-  server.begin(); 
-
+  server.begin();
+  // The following seven lines are just for testing
+  delay(1000);
+  bool test = sendEmail();
+  if (test) {
+    Serial.println("Test email sent successfully.");
+  } else {
+    Serial.println("Test email failed to send.");
+  }
+  vibLimit = readVibration() * 1.1;
   lastReadingTime = millis();
   digitalWrite(led, 1);
 }
@@ -144,12 +152,14 @@ String convert24To12(String hour, String minute) {
 
   if (!intHour) {
     // Hour 00 is 12 in the morning
-    time = "12:" + minute + "AM";
+    time = "12:" + minute + " AM";
+  } else if (intHour == 12) {
+    time = "12:" + minute + " PM";
   } else if (intHour < 12) {
     time = hour + ":" + minute + " AM";
   } else {
     // Convert 24 hour format to 12 hour.
-    intHour = (intHour - 12) || 12;
+    intHour = intHour - 12;
     firstDigit = intHour / 10;
     secondDigit = intHour % 10;
     // Convert integer to String.
@@ -163,16 +173,19 @@ String convert24To12(String hour, String minute) {
 
 bool sendEmail() {
   WiFiSSLClient sslClient;
+  // Gmail's supports TLS on port 587 AND 465. The former relies
+  // on STARTTLS which is not natively supported by the WiFi101 
+  // lib, but the latter uses implict TLS (SMTPS) which can work. 
   if (!sslClient.connect(EMAIL_LINK, 465)) {
     Serial.println("Connection to email server failed.");
     return false;
   }
   Serial.println("Connected to email server.");
 
+  // Initiate SMTP conversation with TLS
+  sslClient.println("EHLO localhost");
   if (!readResponse(sslClient)) return false;
-  sslClient.println("EHLO " + String(EMAIL_ADDR));
-  if (!readResponse(sslClient)) return false;
-
+ 
   // Auth with base64 encoded credentials
   sslClient.println("AUTH LOGIN");
   if (!readResponse(sslClient)) return false;
@@ -213,13 +226,34 @@ bool sendEmail() {
 }
 
 bool readResponse(WiFiSSLClient &client) {
-  while (client.available()) {
-    String line = client.readStringUntil('\n');
-    Serial.println(line);
-    if (line.startsWith("2") || line.startsWith("3")) {
-      return true;
+  unsigned long timeout = millis() + 30000; // 10 second timeout
+  String response = "";
+  
+  while (millis() < timeout) {
+    while (client.available()) {
+      String line = client.readStringUntil('\n');
+      Serial.print("Server: ");
+      Serial.println(line);
+      response = line;
+      
+      if (line.length() >= 3) {
+        char continuation = line.charAt(3);
+        
+        // If this is the final response line (space after status code, not dash)
+        if (continuation == ' ') {
+          char statusCode = line.charAt(0);
+          if (statusCode == '2' || statusCode == '3') {
+            return true;
+          } else {
+            return false;
+          }
+        }
+        // If continuation == '-', keep reading more lines
+      }
     }
+    delay(100);
   }
-  delay(1000);
-  return true;
+  
+  Serial.println("Timeout waiting for server response");
+  return false;
 }

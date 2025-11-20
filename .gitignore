@@ -1,2 +1,4 @@
 *.zip
 fp-info-cache
+network_details.h
+email_details.h
