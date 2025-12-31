@@ -181,6 +181,7 @@ bool sendEmail() {
   errorCode += 1000; //  error 1xxx
   if (!sslClient.connect(EMAIL_LINK, 465)) {
     Serial.println("Connection to email server failed.");
+    retryEmail = false;
     return false;
   }
   Serial.println("Connected to email server.");
@@ -214,7 +215,7 @@ bool sendEmail() {
   // Prepare email content
   errorCode += 1000; // error 6xxx
   sslClient.println("MAIL FROM:<" + String(EMAIL_ADDR) + ">");
-  if (readResponse(sslClient)) return false;
+  if (!readResponse(sslClient)) return false;
   errorCode += 1000; // error 7xxx
   sslClient.println("RCPT TO:<" + String(EMAIL_DEST) + ">");
   if (!readResponse(sslClient)) return false;
@@ -253,16 +254,18 @@ bool readResponse(WiFiSSLClient &client) {
         // If this is the final response line (space after status code, not dash)
         if (continuation == ' ') {
           char statusCode = line.charAt(0);
+          String fullCode = line.substring(0, 3);
+          errorCode += fullCode.toInt();
           if (statusCode == '2' || statusCode == '3') {
             return true;
           } else if (statusCode == '4') {
             // https://support.google.com/a/answer/3221692?sjid=15376637176408798280-NA
             // "Error codes that start with a 4 indicate the server had temporary failure 
             // but the action will be completed with another try."
+            Serial.print("Code: ");
+            Serial.println(fullCode);
             return false;
           } else {
-            String fullCode = line.substring(0, 3);
-            errorCode += fullCode.toInt();
             retryEmail = false;
             return false;
           }
