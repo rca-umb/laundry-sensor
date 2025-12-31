@@ -25,6 +25,9 @@ float currentVibs;
 unsigned long lastReadingTime = 0;
 const unsigned long readingInterval = 120000; // 2 minutes
 
+int errorCode = 0;
+bool retryEmail = true;
+
 void setup() {
   Serial.begin(9600);
   WiFi.setPins(8,7,4,2);
@@ -54,13 +57,18 @@ void loop() {
     currentVibs = readVibration();
     lastReadingTime = currentTime;
     if (currentVibs < vibLimit) { // Cycle done
-      const bool emailSent = sendEmail();
-      if (emailSent) {
-        Serial.println("Email sent successfully.");
-      } else {
-        Serial.println("Email failed to send.");
+      bool emailSent = false;
+      while (retryEmail) {
+        emailSent = sendEmail();
+        if (emailSent) {
+          Serial.println("Email sent successfully.");
+          exit(0);
+        } else {
+          Serial.println("Email failed to send.");
+          delay(2000);
+        }
       }
-      exit(0);
+      ledErrorBlink();
     }
   }
 
@@ -169,7 +177,8 @@ bool sendEmail() {
   WiFiSSLClient sslClient;
   // Gmail's supports TLS on port 587 AND 465. The former relies
   // on STARTTLS which is not natively supported by the WiFi101 
-  // lib, but the latter uses implict TLS (SMTPS) which can work. 
+  // lib, but the latter uses implict TLS (SMTPS) which can work.
+  errorCode += 1000; //  error 1xxx
   if (!sslClient.connect(EMAIL_LINK, 465)) {
     Serial.println("Connection to email server failed.");
     return false;
@@ -177,13 +186,16 @@ bool sendEmail() {
   Serial.println("Connected to email server.");
 
   // Initiate SMTP conversation with TLS
+  errorCode += 1000; // error 2xxx
   sslClient.println("EHLO localhost");
   if (!readResponse(sslClient)) return false;
  
   // Auth with base64 encoded credentials
+  errorCode += 1000; // error 3xxx
   sslClient.println("AUTH LOGIN");
   if (!readResponse(sslClient)) return false;
   // Encode username
+  errorCode += 1000; // error 4xxx
   int inputLen = strlen(EMAIL_ADDR);
   int encodedLen = ((inputLen + 2) / 3) * 4 + 1;
   unsigned char encodedUser[encodedLen];
@@ -191,6 +203,7 @@ bool sendEmail() {
   sslClient.println((char*)encodedUser);
   if (!readResponse(sslClient)) return false;
   // Encode password
+  errorCode += 1000; // error 5xxx
   inputLen = strlen(EMAIL_PASS);
   encodedLen = ((inputLen + 2) / 3) * 4 + 1;
   unsigned char encodedPass[encodedLen];
@@ -199,12 +212,16 @@ bool sendEmail() {
   if (!readResponse(sslClient)) return false;
 
   // Prepare email content
+  errorCode += 1000; // error 6xxx
   sslClient.println("MAIL FROM:<" + String(EMAIL_ADDR) + ">");
-  if (!readResponse(sslClient)) return false;
+  if (readResponse(sslClient)) return false;
+  errorCode += 1000; // error 7xxx
   sslClient.println("RCPT TO:<" + String(EMAIL_DEST) + ">");
   if (!readResponse(sslClient)) return false;
+  errorCode += 1000; // error 8xxx
   sslClient.println("DATA");
   if (!readResponse(sslClient)) return false;
+  errorCode += 1000; // error 9xxx
   sslClient.println("From: " + String(EMAIL_NAME) + " <" + String(EMAIL_ADDR) + ">");
   sslClient.println("To: <" + String(EMAIL_DEST) + ">");
   sslClient.println("Subject: Laundry Complete");
@@ -238,7 +255,15 @@ bool readResponse(WiFiSSLClient &client) {
           char statusCode = line.charAt(0);
           if (statusCode == '2' || statusCode == '3') {
             return true;
+          } else if (statusCode == '4') {
+            // https://support.google.com/a/answer/3221692?sjid=15376637176408798280-NA
+            // "Error codes that start with a 4 indicate the server had temporary failure 
+            // but the action will be completed with another try."
+            return false;
           } else {
+            String fullCode = line.substring(0, 3);
+            errorCode += fullCode.toInt();
+            retryEmail = false;
             return false;
           }
         }
@@ -250,4 +275,65 @@ bool readResponse(WiFiSSLClient &client) {
   
   Serial.println("Timeout waiting for server response");
   return false;
+}
+
+void ledErrorBlink() {
+  // Blink error code on built-in LED for debugging without serial access.
+  // LED will be blank for 5 seconds to indicate start of error code.
+  // First blink indicates where in the code the error occurred:
+  // 1xxx - SMTP connection failed
+  // 2xxx - EHLO failed
+  // 3xxx - AUTH LOGIN failed
+  // 4xxx - Username encoding/sending failed
+  // 5xxx - Password encoding/sending failed
+  // 6xxx - MAIL FROM failed
+  // 7xxx - RCPT TO failed
+  // 8xxx - DATA command failed
+  // 9xxx - Email content sending failed
+  // Subsequent blinks indicate specific error code defined by SMTP standard, 
+  // if any, otherwise, it was likely a timeout.
+  if (errorCode < 1) {
+    while (true) {
+      digitalWrite(led, HIGH);
+      delay(100);
+      digitalWrite(led, LOW);
+      delay(100);
+    }
+  } else {
+    int thousands = errorCode / 1000;
+    int hundreds = (errorCode / 100) % 10;
+    int tens = (errorCode / 10) % 10;
+    int ones = errorCode % 10;
+    while (true) {
+      digitalWrite(led, LOW);
+      delay(5000);
+      for (int i = 0; i < thousands; i++) {
+        digitalWrite(led, HIGH);
+        delay(300);
+        digitalWrite(led, LOW);
+        delay(300);
+      }
+      delay(1000);
+      for (int i = 0; i < hundreds; i++) {
+        digitalWrite(led, HIGH);
+        delay(300);
+        digitalWrite(led, LOW);
+        delay(300);
+      }
+      delay(1000);
+      for (int i = 0; i < tens; i++) {
+        digitalWrite(led, HIGH);
+        delay(300);
+        digitalWrite(led, LOW);
+        delay(300);
+      }
+      delay(1000);
+      for (int i = 0; i < ones; i++) {
+        digitalWrite(led, HIGH);
+        delay(300);
+        digitalWrite(led, LOW);
+        delay(300);
+      }
+    }
+  }
 }
