@@ -4,7 +4,7 @@ A device that makes a "dumb" washer/dryer smart by alerting you when the cycle i
 
 ## Description
 
-I set out to create this because I don't have a smart washer or dryer, so I have no way of knowing when my clothes are done. Obviously, I could just go check or set a timer, but I've noticed that the full cycle time varies quite a bit. This might not seem like a real problem, but because of the setup where I live, it actually is (just trust me). I hypothesized that using a really simple wireless-enabled dev board and a piezo, I could create a system which is placed on the machine, detects when the vibrations stop, and sends me a notification.
+I set out to create this because I don't have a smart washer or dryer, so I have no way of knowing when my clothes are done. Obviously, I could just go check or set a timer, but I've noticed that the full cycle time varies quite a bit. I hypothesized that using a really simple wireless-enabled dev board and a piezoelectric sensor, I could create a system which is placed on the machine, detects when the vibrations stop, and sends me a notification.
 
 The reasons I decided to pursue this project are because it would genuinely provide value to me and there are levels to how far I could go with it, increasing the engineering complexity at each step. For example, what if I don't want it to be plugged in? What if I don't want it to use a battery (motion harvesting)? I could start with the most basic version and continuously improve.
 
